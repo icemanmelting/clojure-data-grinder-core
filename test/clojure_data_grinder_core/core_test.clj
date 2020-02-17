@@ -2,14 +2,10 @@
   (:require [clojure.test :refer :all]
             [clojure-data-grinder-core.core :refer :all]
             [clojure.core.async :as async]
-            [clojure.java.io :as io])
-  (:import (java.io IOException)))
+            [clojure.java.io :as io]))
 
-(def function-state (atom true))
-(def output-file-name "test.txt")
-
-(def test-channel (async/chan 1))
-(def test-channel-2 (async/chan 1))
+(def ^:private function-state (atom true))
+(def ^:private sink-output (atom nil))
 
 (defn- source-function []
   (when @function-state
@@ -24,11 +20,10 @@
 (defn sink-fn [v]
   (when @function-state
     (reset! function-state false)
-    (spit output-file-name (str "result -> " v))))
+    (reset! sink-output (str "result -> " v))))
 
 (defn cleaning-fixture [f]
-  (if (.exists (io/as-file output-file-name))
-    (io/delete-file output-file-name true))
+  (reset! sink-output nil)
   (reset! function-state true)
   (reset-pool)
   (f))
@@ -49,7 +44,8 @@
        :timed-out))))
 
 (deftest source-test
-  (let [st (atom {:processed-batches 0
+  (let [test-channel (async/chan 1)
+        st (atom {:processed-batches 0
                      :successful-batches 0
                      :unsuccessful-batches 0})
         source (->SourceImpl st "test" {} nil source-function test-channel 5)]
@@ -64,7 +60,9 @@
         sb 1))))
 
 (deftest grinder-test
-  (let [st (atom {:processed-batches 0
+  (let [test-channel (async/chan 1)
+        test-channel-2 (async/chan 1)
+        st (atom {:processed-batches 0
                      :successful-batches 0
                      :unsuccessful-batches 0})
         grinder (->GrinderImpl st "test" {} nil test-channel grind-function test-channel-2 5)]
@@ -79,20 +77,20 @@
         1 pb
         1 sb))))
 
-;(deftest sink-test
-;  (let [state (atom {:processed-batches 0
-;                     :successful-batches 0
-;                     :unsuccessful-batches 0})
-;        sink (->SinkImpl state "test" {} nil sink-fn test-channel 5)]
-;    (async/>!! test-channel 1)
-;
-;    (.init sink)
-;
-;    (Thread/sleep 2000)
-;
-;    (let [{pb :processed-batches sb :successful-batches} (.getState sink)]
-;          ;file-content (slurp output-file-name)]
-;      (are [x y] (= x y)
-;       ; file-content "result -> 1"
-;        pb 1
-;        sb 1))))
+(deftest sink-test
+  (let [test-channel (async/chan 1)
+        state (atom {:processed-batches 0
+                     :successful-batches 0
+                     :unsuccessful-batches 0})
+        sink (->SinkImpl state "test" {} nil sink-fn test-channel 5)]
+    (async/>!! test-channel 1)
+
+    (.init sink)
+
+    (Thread/sleep 2000)
+
+    (let [{pb :processed-batches sb :successful-batches} (.getState sink)]
+      (are [x y] (= x y)
+       "result -> 1" @sink-output
+        pb 1
+        sb 1))))
