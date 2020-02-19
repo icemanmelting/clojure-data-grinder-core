@@ -4,7 +4,7 @@
             [overtone.at-at :as at]
             [juxt.dirwatch :refer [watch-dir]]))
 
-(def ^:private schedule-pool (at/mk-pool))
+(def schedule-pool (at/mk-pool))
 
 (defn reset-pool []
   (at/stop-and-reset-pool! schedule-pool :strategy :kill))
@@ -41,7 +41,10 @@
     (if-let [result (v-fn conf)]
       (throw (ex-info "Problem validating Source conf!" result))
       (log/debug "Source " name " validated")))
-  (getState [this] @state))
+  (getState [this] @state)
+  Runnable
+  (^void run [this]
+    (init this)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;Pre-implemented sources;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defrecord FileWatcherSource [state name conf v-fn x-fn out poll-frequency-s]
@@ -57,7 +60,10 @@
     (if-let [result (v-fn conf)]
       (throw (ex-info "Problem validating Source conf!" result))
       (log/debug "Source " name " validated")))
-  (getState [this] @state))
+  (getState [this] @state)
+  Runnable
+  (^void run [this]
+    (init this)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defprotocol Grinder
@@ -89,7 +95,10 @@
     (if-let [result (v-fn conf)]
       (throw (ex-info "Problem validating Grinder conf!" result))
       (log/debug "Grinder " name " validated")))
-  (getState [this] @state))
+  (getState [this] @state)
+  Runnable
+  (^void run [this]
+    (init this)))
 
 (defprotocol Sink
   "Data Sink -> sinks the data into whatever form needed, DB, File, Cloud, etc"
@@ -117,4 +126,7 @@
                      (log/error e)
                      (swap! state merge {:processed-batches (inc pb) :unsuccessful-batches (inc ub)}))))
               schedule-pool))
-  (getState [this] @state))
+  (getState [this] @state)
+  Runnable
+  (^void run [this]
+    (init this)))
