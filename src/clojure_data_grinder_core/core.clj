@@ -60,10 +60,7 @@
     (if-let [result (v-fn conf)]
       (throw (ex-info "Problem validating Source conf!" result))
       (log/debug "Source " name " validated")))
-  (getState [this] @state)
-  Runnable
-  (^void run [this]
-    (init this)))
+  (getState [this] @state))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defprotocol Grinder

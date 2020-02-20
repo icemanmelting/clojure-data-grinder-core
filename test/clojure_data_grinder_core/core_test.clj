@@ -50,7 +50,7 @@
                      :unsuccessful-batches 0})
         source (->SourceImpl st "test" {} nil source-function test-channel 5)]
 
-    (.init source)
+    (.run source)
 
     (let [v (<!!? test-channel 2000)
           {pb :processed-batches sb :successful-batches} (.getState source)]
@@ -68,7 +68,7 @@
         grinder (->GrinderImpl st "test" {} nil test-channel grind-function test-channel-2 5)]
     (async/>!! test-channel 1)
 
-    (.init grinder)
+    (.run grinder)
 
     (let [value (<!!? test-channel-2 2000)
           {pb :processed-batches sb :successful-batches} (.getState grinder)]
@@ -85,7 +85,7 @@
         sink (->SinkImpl state "test" {} nil sink-fn test-channel 5)]
     (async/>!! test-channel 1)
 
-    (.init sink)
+    (.run sink)
 
     (Thread/sleep 2000)
 
