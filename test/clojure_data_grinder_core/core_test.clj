@@ -46,8 +46,8 @@
 (deftest source-test
   (let [test-channel (async/chan 1)
         st (atom {:processed-batches 0
-                     :successful-batches 0
-                     :unsuccessful-batches 0})
+                  :successful-batches 0
+                  :unsuccessful-batches 0})
         source (->SourceImpl st "test" {} nil source-function test-channel 5)]
 
     (.run source)
@@ -63,8 +63,8 @@
   (let [test-channel (async/chan 1)
         test-channel-2 (async/chan 1)
         st (atom {:processed-batches 0
-                     :successful-batches 0
-                     :unsuccessful-batches 0})
+                  :successful-batches 0
+                  :unsuccessful-batches 0})
         grinder (->GrinderImpl st "test" {} nil test-channel grind-function test-channel-2 5)]
     (async/>!! test-channel 1)
 
@@ -91,6 +91,65 @@
 
     (let [{pb :processed-batches sb :successful-batches} (.getState sink)]
       (are [x y] (= x y)
-       "result -> 1" @sink-output
+        "result -> 1" @sink-output
         pb 1
         sb 1))))
+
+(deftest enricher-test
+  (let [test-channel (async/chan 1)
+        test-channel-2 (async/chan 1)
+        state (atom {:processed-batches 0
+                     :successful-batches 0
+                     :unsuccessful-batches 0})
+        enricher (->EnricherImpl state
+                                 "test"
+                                 {}
+                                 nil
+                                 test-channel
+                                 (fn [cache v]
+                                   (let [a (:a v)]
+                                     (assoc v a (get cache a))))
+                                 test-channel-2
+                                 5 (atom {:a "2"}) #(hash-map :a "2") 5)]
+    (async/>!! test-channel {:a :a})
+
+    (.run enricher)
+
+    (Thread/sleep 2000)
+
+    (let [value (<!!? test-channel-2 2000)
+          {pb :processed-batches sb :successful-batches} (.getState enricher)]
+      (are [x y] (= x y)
+        {:a "2"} value
+        1 pb
+        1 sb))))
+
+(deftest splitter-test
+  (let [test-channel (async/chan 1)
+        test-channel-2 (async/chan 1)
+        test-channel-3 (async/chan 1)
+        state (atom {:processed-batches 0
+                     :successful-batches 0
+                     :unsuccessful-batches 0})
+        splitter (->SplitterImpl state
+                                 "test"
+                                 {}
+                                 nil
+                                 test-channel
+                                 5
+                                 [test-channel-2
+                                  test-channel-3])]
+    (async/>!! test-channel {:a :a})
+
+    (.run splitter)
+
+    (Thread/sleep 2000)
+
+    (let [value1 (<!!? test-channel-2 2000)
+          value2 (<!!? test-channel-3 2000)
+          {pb :processed-batches sb :successful-batches} (.getState splitter)]
+      (are [x y] (= x y)
+        {:a :a} value1
+        {:a :a} value2
+        1 pb
+        1 sb))))

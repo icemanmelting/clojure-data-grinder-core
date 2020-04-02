@@ -4,7 +4,7 @@
             [overtone.at-at :as at]
             [juxt.dirwatch :refer [watch-dir]]))
 
-(def schedule-pool (at/mk-pool))
+(def ^:private schedule-pool (at/mk-pool))
 
 (defn reset-pool []
   (at/stop-and-reset-pool! schedule-pool :strategy :kill))
@@ -67,6 +67,36 @@
   "Data Grinder -> processes the raw data"
   (grind [this v]))
 
+(defrecord FilePartitionerProcessor [state name conf v-fn in x-fn out poll-frequency-s]
+  Grinder
+  (grind [this v]
+    (log/debug "Grinding value " v " on Grinder " name)
+    (with-open [r (clojure.java.io/reader v)
+                partitions (partition (or (:batch-size conf) 100) (line-seq r))]
+      (doseq [p partitions]
+        (>!! out p))))
+  Step
+  (init [this]
+    (log/debug "Initialized Grinder " name)
+    (at/every poll-frequency-s
+              #(let [{sb :successful-batches ub :unsuccessful-batches pb :processed-batches} @state]
+                 (try
+                   (when-let [v (<!! in)]
+                     (grind this v)
+                     (swap! state merge {:processed-batches (inc pb) :successful-batches (inc sb)}))
+                   (catch Exception e
+                     (log/error e)
+                     (swap! state merge {:processed-batches (inc pb) :unsuccessful-batches (inc ub)})))
+                 (log/debug @state))
+              schedule-pool))
+  (validate [this]
+    (if-let [result (v-fn conf)]
+      (throw (ex-info "Problem validating Grinder conf!" result))
+      (log/debug "Grinder " name " validated")))
+  Runnable
+  (^void run [this]
+    (init this)))
+
 (defrecord GrinderImpl [state name conf v-fn in x-fn out poll-frequency-s]
   Grinder
   (grind [this v]
@@ -80,7 +110,6 @@
               #(let [{sb :successful-batches ub :unsuccessful-batches pb :processed-batches} @state]
                  (try
                    (when-let [v (<!! in)]
-                     (log/debug "I AM HERE!!")
                      (grind this v)
                      (swap! state merge {:processed-batches (inc pb) :successful-batches (inc sb)}))
                    (catch Exception e
@@ -118,6 +147,74 @@
                  (try
                    (when-let [v (<!! in)]
                      (sink this v)
+                     (swap! state merge {:processed-batches (inc pb) :successful-batches (inc sb)}))
+                   (catch Exception e
+                     (log/error e)
+                     (swap! state merge {:processed-batches (inc pb) :unsuccessful-batches (inc ub)}))))
+              schedule-pool))
+  (getState [this] @state)
+  Runnable
+  (^void run [this]
+    (init this)))
+
+(defprotocol Enricher
+  "Enricher is used to enrich data from a specific source. For instance read data from a table,
+  and mix it with data coming in from a channel"
+  (mix [this v] "method to mix-data"))
+
+(defrecord EnricherImpl [state name conf v-fn in x-fn out poll-frequency-s cache cache-fn cache-poll-frequency-s]
+  Enricher
+  (mix [this v]
+    (log/debug "Enriching value " v " in " name)
+    (x-fn @cache v))
+  Step
+  (validate [this]
+    (if-let [result (v-fn conf)]
+      (throw (ex-info "Problem validating Enricher conf!" result))
+      (log/debug "Enricher " name " validated")))
+  (init [this]
+    (log/debug "Initialized Enricher " name)
+    (at/every poll-frequency-s
+              #(let [{sb :successful-batches ub :unsuccessful-batches pb :processed-batches} @state]
+                 (try
+                   (when-let [v (<!! in)]
+                     (>!! out (mix this v))
+                     (swap! state merge {:processed-batches (inc pb) :successful-batches (inc sb)}))
+                   (catch Exception e
+                     (log/error e)
+                     (swap! state merge {:processed-batches (inc pb) :unsuccessful-batches (inc ub)}))))
+              schedule-pool)
+    (at/every cache-poll-frequency-s
+              #(let [data (cache-fn)]
+                 (reset! cache data))
+              schedule-pool))
+  (getState [this] @state)
+  Runnable
+  (^void run [this]
+    (init this)))
+
+(defprotocol Splitter
+  "Splitter is a processor used to literally take the contents of a channel and replicate it into n channels"
+  (split [this v]))
+
+(defrecord SplitterImpl [state name conf v-fn in poll-frequency-s out-channels]
+  Splitter
+  (split [this v]
+    (log/debug "Splitting value " v " in " name " to " out-channels)
+    (doseq [out out-channels]
+      (>!! out v)))
+  Step
+  (validate [this]
+    (if-let [result (v-fn conf)]
+      (throw (ex-info "Problem validating Splitter conf!" result))
+      (log/debug "Splitter " name " validated")))
+  (init [this]
+    (log/debug "Initialized Splitter " name)
+    (at/every poll-frequency-s
+              #(let [{sb :successful-batches ub :unsuccessful-batches pb :processed-batches} @state]
+                 (try
+                   (when-let [v (<!! in)]
+                     (split this v)
                      (swap! state merge {:processed-batches (inc pb) :successful-batches (inc sb)}))
                    (catch Exception e
                      (log/error e)
