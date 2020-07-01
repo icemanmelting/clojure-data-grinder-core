@@ -181,7 +181,8 @@
               #(let [{sb :successful-batches ub :unsuccessful-batches pb :processed-batches} @state]
                  (try
                    (when-let [v (<!! in)]
-                     (>!! out (mix this v))
+                     (doseq [c out]
+                       (>!! c (mix this v)))
                      (swap! state merge {:processed-batches (inc pb) :successful-batches (inc sb)}))
                    (catch Exception e
                      (log/error e)
