@@ -8,5 +8,4 @@
                  [org.clojure/tools.logging "0.6.0"]
                  [overtone/at-at "1.2.0"]
                  [juxt/dirwatch "0.2.5"]
-                 [log4j/log4j "1.2.17"]]
-  :aot :all)
+                 [log4j/log4j "1.2.17"]])

@@ -110,7 +110,7 @@
                                    (let [a (:a v)]
                                      (assoc v a (get cache a))))
                                  test-channel-2
-                                 5 (atom {:a "2"}) #(hash-map :a "2") 5)]
+                                 5 (atom {:a "2"}) nil 5)]
     (async/>!! test-channel {:a :a})
 
     (.run enricher)
