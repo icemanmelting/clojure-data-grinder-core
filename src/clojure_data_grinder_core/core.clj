@@ -22,8 +22,9 @@
 (defrecord SourceImpl [state name conf v-fn x-fn out poll-frequency-s]
   Source
   (output [this value]
-    (log/debug "Adding value " value " to source channel " name)
-    (>!! out value))                                        ;;todo - need to create logic for batch output, maybe method next batch???
+    (log/debug "Adding value " value " to source channels " name)
+    (doseq [c out ]
+      (>!! c value)));;todo - need to create logic for batch output, maybe method next batch???
   Step
   (init [this]
     (log/debug "Initialized Source " name)
@@ -55,7 +56,7 @@
   Step
   (init [this]
     (log/debug "Initialized Source " name)
-    (watch-dir #(>!! out %) (clojure.java.io/file (:watch-dir conf))))
+    (watch-dir #(>!! (first out) %) (clojure.java.io/file (:watch-dir conf))))
   (validate [this]
     (if-let [result (v-fn conf)]
       (throw (ex-info "Problem validating Source conf!" result))
@@ -74,7 +75,8 @@
     (with-open [r (clojure.java.io/reader v)
                 partitions (partition (or (:batch-size conf) 100) (line-seq r))]
       (doseq [p partitions]
-        (>!! out p))))
+        (doseq [c out]
+          (>!! c p)))))
   Step
   (init [this]
     (log/debug "Initialized Grinder " name)
@@ -102,7 +104,8 @@
   (grind [this v]
     (log/debug "Grinding value " v " on Grinder " name)
     (when-let [res (x-fn v)]
-      (>!! out res)))
+      (doseq [c out]
+        (>!! c res))))
   Step
   (init [this]
     (log/debug "Initialized Grinder " name)
@@ -178,7 +181,8 @@
               #(let [{sb :successful-batches ub :unsuccessful-batches pb :processed-batches} @state]
                  (try
                    (when-let [v (<!! in)]
-                     (>!! out (mix this v))
+                     (doseq [c out]
+                       (>!! c (mix this v)))
                      (swap! state merge {:processed-batches (inc pb) :successful-batches (inc sb)}))
                    (catch Exception e
                      (log/error e)
@@ -187,38 +191,6 @@
     (at/every cache-poll-frequency-s
               #(let [data (cache-fn)]
                  (reset! cache data))
-              schedule-pool))
-  (getState [this] @state)
-  Runnable
-  (^void run [this]
-    (init this)))
-
-(defprotocol Splitter
-  "Splitter is a processor used to literally take the contents of a channel and replicate it into n channels"
-  (split [this v]))
-
-(defrecord SplitterImpl [state name conf v-fn in poll-frequency-s out-channels]
-  Splitter
-  (split [this v]
-    (log/debug "Splitting value " v " in " name " to " out-channels)
-    (doseq [out out-channels]
-      (>!! out v)))
-  Step
-  (validate [this]
-    (if-let [result (v-fn conf)]
-      (throw (ex-info "Problem validating Splitter conf!" result))
-      (log/debug "Splitter " name " validated")))
-  (init [this]
-    (log/debug "Initialized Splitter " name)
-    (at/every poll-frequency-s
-              #(let [{sb :successful-batches ub :unsuccessful-batches pb :processed-batches} @state]
-                 (try
-                   (when-let [v (<!! in)]
-                     (split this v)
-                     (swap! state merge {:processed-batches (inc pb) :successful-batches (inc sb)}))
-                   (catch Exception e
-                     (log/error e)
-                     (swap! state merge {:processed-batches (inc pb) :unsuccessful-batches (inc ub)}))))
               schedule-pool))
   (getState [this] @state)
   Runnable
