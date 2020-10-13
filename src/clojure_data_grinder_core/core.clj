@@ -4,7 +4,7 @@
             [overtone.at-at :as at]
             [juxt.dirwatch :refer [watch-dir]]))
 
-(def ^:private schedule-pool (at/mk-pool))
+(def schedule-pool (at/mk-pool))
 
 (defn reset-pool []
   (at/stop-and-reset-pool! schedule-pool :strategy :kill))
@@ -30,6 +30,7 @@
     (log/debug "Initialized Source " name)
     (at/every poll-frequency-s
               #(let [{sb :successful-batches ub :unsuccessful-batches pb :processed-batches} @state]
+                 (log/info "Calling source" name)
                  (try
                    (when-let [v (x-fn)]
                      (output this v)
@@ -73,7 +74,7 @@
   (grind [this v]
     (log/debug "Grinding value " v " on Grinder " name)
     (with-open [r (clojure.java.io/reader v)
-                partitions (partition (or (:batch-size conf) 100) (line-seq r))]
+                partitions (partition (or (:batch-size @conf) 100) (line-seq r))]
       (doseq [p partitions]
         (doseq [c out]
           (>!! c p)))))
@@ -92,7 +93,7 @@
                  (log/debug @state))
               schedule-pool))
   (validate [this]
-    (if-let [result (v-fn conf)]
+    (if-let [result (v-fn @conf)]
       (throw (ex-info "Problem validating Grinder conf!" result))
       (log/debug "Grinder " name " validated")))
   Runnable
@@ -121,7 +122,7 @@
                  (log/debug @state))
               schedule-pool))
   (validate [this]
-    (if-let [result (v-fn conf)]
+    (if-let [result (v-fn @conf)]
       (throw (ex-info "Problem validating Grinder conf!" result))
       (log/debug "Grinder " name " validated")))
   (getState [this] @state)
@@ -140,7 +141,7 @@
     (x-fn v))
   Step
   (validate [this]
-    (if-let [result (v-fn conf)]
+    (if-let [result (v-fn @conf)]
       (throw (ex-info "Problem validating Sink conf!" result))
       (log/debug "Sink " name " validated")))
   (init [this]
@@ -172,7 +173,7 @@
     (x-fn @cache v))
   Step
   (validate [this]
-    (if-let [result (v-fn conf)]
+    (if-let [result (v-fn @conf)]
       (throw (ex-info "Problem validating Enricher conf!" result))
       (log/debug "Enricher " name " validated")))
   (init [this]
