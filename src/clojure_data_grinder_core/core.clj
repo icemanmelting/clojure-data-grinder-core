@@ -2,8 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [clojure.core.async :as a :refer [chan go go-loop <!! >!! mult tap close!]]
             [overtone.at-at :as at]
-            [juxt.dirwatch :refer [watch-dir]])
-  (:import (clojure_data_grinder_core.core Grinder Enricher)))
+            [juxt.dirwatch :refer [watch-dir]]))
 
 (def schedule-pool (at/mk-pool))
 
