@@ -13,7 +13,8 @@
   "Base step that contains the methods common to all Steps in the processing pipeline"
   (init [this] "initialize the current step")
   (validate [this])
-  (getState [this]))
+  (getState [this])
+  (stop [this]))
 
 (defprotocol Source
   "Source Step -> reads raw data ready to be processed"
@@ -42,6 +43,7 @@
       (throw (ex-info "Problem validating Source conf!" result))
       (log/debug "Source " name " validated")))
   (getState [this] @state)
+  (stop [this])
   Runnable
   (^void run [this]
     (init this)))
@@ -60,7 +62,8 @@
     (if-let [result (v-fn conf)]
       (throw (ex-info "Problem validating Source conf!" result))
       (log/debug "Source " name " validated")))
-  (getState [this] @state))
+  (getState [this] @state)
+  (stop [this]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defprotocol Grinder
@@ -93,6 +96,8 @@
     (if-let [result (v-fn conf)]
       (throw (ex-info "Problem validating Grinder conf!" result))
       (log/debug "Grinder " name " validated")))
+  (getState [this] @state)
+  (stop [this])
   Runnable
   (^void run [this]
     (init this)))
@@ -122,6 +127,7 @@
       (throw (ex-info "Problem validating Grinder conf!" result))
       (log/debug "Grinder " name " validated")))
   (getState [this] @state)
+  (stop [this])
   Runnable
   (^void run [this]
     (init this)))
@@ -153,6 +159,7 @@
                      (swap! state merge {:processed-batches (inc pb) :unsuccessful-batches (inc ub)}))))
               schedule-pool))
   (getState [this] @state)
+  (stop [this])
   Runnable
   (^void run [this]
     (init this)))
@@ -189,6 +196,7 @@
                  (reset! cache data))
               schedule-pool))
   (getState [this] @state)
+  (stop [this])
   Runnable
   (^void run [this]
     (init this)))
@@ -221,6 +229,7 @@
                      (swap! state merge {:processed-batches (inc pb) :unsuccessful-batches (inc ub)}))))
               schedule-pool))
   (getState [this] @state)
+  (stop [this])
   Runnable
   (^void run [this]
     (init this)))
