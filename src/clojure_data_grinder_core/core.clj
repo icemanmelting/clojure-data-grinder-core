@@ -2,12 +2,19 @@
   (:require [clojure.tools.logging :as log]
             [clojure.core.async :as a :refer [chan go go-loop <!! >!! mult tap close!]]
             [overtone.at-at :as at]
-            [juxt.dirwatch :refer [watch-dir]]))
+            [juxt.dirwatch :refer [watch-dir]])
+  (:import (clojure.lang Keyword)))
 
 (def schedule-pool (at/mk-pool))
 
 (defn reset-pool []
   (at/stop-and-reset-pool! schedule-pool :strategy :kill))
+
+(defprotocol GlobalState
+  "Defines a global state for the execution environment. Used to keep shared data between steps"
+  (init [this])
+  (alter-state-value [this ^Keyword key value])
+  (get-state-value [this ^Keyword key]))
 
 (defprotocol Step
   "Base step that contains the methods common to all Steps in the processing pipeline"
