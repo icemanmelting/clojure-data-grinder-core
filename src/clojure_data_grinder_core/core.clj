@@ -10,11 +10,19 @@
 (defn reset-pool []
   (at/stop-and-reset-pool! schedule-pool :strategy :kill))
 
-(defprotocol GlobalState
+(defprotocol IGlobalState
   "Defines a global state for the execution environment. Used to keep shared data between steps"
-  (init [this])
-  (alter-state-value [this ^Keyword key value])
-  (get-state-value [this ^Keyword key]))
+  (alterStateValue [this ^Keyword key value])
+  (getStateValue [this ^Keyword key]))
+
+(defrecord GlobalState [init-val]
+  IGlobalState
+  (alterStateValue [_ key value]
+    (swap! init-val assoc key value))
+  (getStateValue [_ key]
+    (get @init-val key)))
+
+(def global-state (GlobalState. (atom {})))
 
 (defprotocol Step
   "Base step that contains the methods common to all Steps in the processing pipeline"
